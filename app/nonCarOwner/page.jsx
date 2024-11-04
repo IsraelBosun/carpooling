@@ -56,3 +56,7 @@ export default function Register() {
     </div>
   );
 }
+
+
+// "react": "19.0.0-rc-02c0e824-20241028",
+// "react-dom": "19.0.0-rc-02c0e824-20241028",
