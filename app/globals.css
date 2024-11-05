@@ -23,6 +23,10 @@
   top: 0;
 } */
 
+
+
+
+
 .main:after {
   content: "";
   background-image: url("../public/grid.svg");
