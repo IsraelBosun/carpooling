@@ -1,4 +1,6 @@
-'use client';
+"use client"
+
+
 import { useState, useEffect, useRef } from 'react';
 import { auth, db } from '../../components/firebase';
 import { getDoc, doc, updateDoc } from 'firebase/firestore';
@@ -6,6 +8,13 @@ import mapboxgl from 'mapbox-gl';
 import MapboxGeocoder from '@mapbox/mapbox-gl-geocoder';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import '@mapbox/mapbox-gl-geocoder/dist/mapbox-gl-geocoder.css';
+import { FaCarAlt, FaBirthdayCake } from "react-icons/fa";
+import { FcDepartment } from "react-icons/fc";
+import { MdEditLocationAlt } from "react-icons/md";
+
+
+
+
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
@@ -13,53 +22,68 @@ export default function Dashboard() {
   const [carOwnerData, setCarOwnerData] = useState(null);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [destination, setDestination] = useState(null);
+  const [user, setUser] = useState(null); // Keep track of authenticated user
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
   const geocoderRef = useRef(null);
 
   useEffect(() => {
-    const fetchData = async (userId) => {
-      const docRef = doc(db, 'carOwners', userId);
-      const docSnap = await getDoc(docRef);
-  
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setCarOwnerData(data);
-        
-        // Set the destination from Firestore if it exists
-        if (data.destination) {
-          setDestination(data.destination);
-        }
+    const unsubscribe = auth.onAuthStateChanged((currentUser) => {
+      if (currentUser) {
+        setUser(currentUser); // Set the authenticated user
       } else {
-        console.error("No such document!");
+        setUser(null); // Set user to null if not authenticated
+        console.error('User not authenticated');
       }
-    };
-  
-    const user = auth.currentUser;
-    if (user) {
-      fetchData(user.uid);
-    } else {
-      console.error("User not authenticated");
-    }
-  }, []);
-  
+    });
 
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      // Fetch car owner data when user is authenticated
+      const fetchData = async (userId) => {
+        const docRef = doc(db, 'carOwners', userId);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setCarOwnerData(data);
+
+          // Set destination if it exists
+          if (data.destination) {
+            setDestination(data.destination);
+          }
+        } else {
+          console.error('No such document!');
+        }
+      };
+
+      fetchData(user.uid); // Fetch car owner data using the user's UID
+    }
+  }, [user]); // Trigger the effect only when the user state changes
+
+  // Update Firestore with new location and destination
   const updateLocationInFirestore = async (userId, location, destDetails) => {
     try {
       const docRef = doc(db, 'carOwners', userId);
-      await updateDoc(docRef, { location, destination: destDetails });
+      const updateData = {
+        location,
+        destination: destDetails || destination, // Preserve existing destination if no new one
+      };
+      await updateDoc(docRef, updateData);
     } catch (error) {
-      console.error("Error updating location in Firestore: ", error);
+      console.error('Error updating location in Firestore: ', error);
     }
   };
 
   useEffect(() => {
     const watchLocation = () => {
       if (navigator.geolocation) {
-        const user = auth.currentUser;
         if (!user) {
-          console.error("User not authenticated");
+          console.error('User not authenticated');
           return;
         }
 
@@ -73,7 +97,7 @@ export default function Dashboard() {
             updateLocationInFirestore(user.uid, location, destination);
           },
           (error) => {
-            console.error("Error getting location: ", error);
+            console.error('Error getting location: ', error);
           },
           {
             enableHighAccuracy: true,
@@ -82,12 +106,14 @@ export default function Dashboard() {
           }
         );
       } else {
-        console.error("Geolocation is not supported by this browser.");
+        console.error('Geolocation is not supported by this browser.');
       }
     };
 
-    watchLocation();
-  }, []);
+    if (user) {
+      watchLocation();
+    }
+  }, [user, destination]); // Watch location only if user is authenticated
 
   useEffect(() => {
     if (mapContainerRef.current && currentLocation) {
@@ -122,7 +148,7 @@ export default function Dashboard() {
 
           setDestination(newDestination);
 
-          updateLocationInFirestore(auth.currentUser.uid, { latitude: currentLocation[1], longitude: currentLocation[0] }, newDestination);
+          updateLocationInFirestore(user.uid, { latitude: currentLocation[1], longitude: currentLocation[0] }, newDestination);
 
           // Fetch the route after setting the destination
           fetchRoute(currentLocation, newDestinationCoordinates);
@@ -187,16 +213,16 @@ export default function Dashboard() {
               'line-join': 'round',
             },
             paint: {
-              'line-color': '#888',
-              'line-width': 8,
+              'line-color': '#FF0000', // Red color for the line
+              'line-width': 4,
             },
           });
         }
       } else {
-        console.error("No route found");
+        console.error('No route found');
       }
     } catch (error) {
-      console.error("Error fetching route: ", error);
+      console.error('Error fetching route: ', error);
     }
   };
 
@@ -215,20 +241,69 @@ export default function Dashboard() {
         </div>
 
         {carOwnerData && (
-          <>
-            <div className="z-10 text-white p-4 flex justify-between items-center">
-              <h2 className="text-xl text-black">{carOwnerData.carType}</h2>
-              <h2 className="text-xl text-black">{carOwnerData.yearsUsed}</h2>
-              <p className='text-black'>{carOwnerData.department}</p>
+  <>
+    <div className="z-10 mx-4 mt-4 bg-neutral-200 p-4 rounded-lg shadow-lg flex flex-col md:flex-row justify-between items-center md:space-x-6 space-y-4 md:space-y-0">
+      <div className="flex items-center justify-start gap-4">
+        <div className="bg-red-200 rounded-full p-3">
+        <FaCarAlt color='red' />
+        </div>
+        <div className=''>
+          <h2 className="text-lg font-semibold text-gray-800">Car Type</h2>
+          <p className="text-xl  text-gray-900">{carOwnerData.carType}</p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-4 justify-end">
+        <div className="bg-green-200 rounded-full p-3">
+        <FaBirthdayCake color ='green' />
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold text-gray-800">Years Used</h2>
+          <p className="text-xl text-gray-900">{carOwnerData.yearsUsed} years</p>
+        </div>
+      </div>
+
+      <div className="flex items-center space-x-4">
+        <div className="bg-blue-200 rounded-full p-3">
+        <FcDepartment color='green'/>
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold text-gray-800">Department</h2>
+          <p className="text-xl text-gray-900">{carOwnerData.department}</p>
+        </div>
+      </div>
+    </div>
+
+    <div className=" mx-4 mt-6 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-lg p-6 shadow-lg text-white space-y-4">
+      {destination && (       
+        <div className="flex-col items-right justify-start gap-4">
+            <div className='flex items-center justify-start gap-3'>
+
+          <div className="bg-white p-2 rounded-full shadow-md">
+          <MdEditLocationAlt  color='red' />
+          </div>
+          <div>
+            <p className="text-sm font-medium">Destination</p>
+            <p className="text-xl font-semibold">{destination.name}</p>
+          </div>
             </div>
-            <div className="w-full p-4 bg-white space-y-4">
-              <p>{carOwnerData.destination}</p>
-              {destination && (
-                <p className="text-black">Destination: {destination.name}</p>
-              )}
-            </div>
-          </>
-        )}
+
+          <div className='flex items-center mt-3 justify-start gap-3'>
+
+          <div className="bg-white p-2 rounded-full shadow-md">
+          <MdEditLocationAlt  color='red' />
+          </div>
+          <div>
+            <p className="text-sm font-medium">Coordinates</p>
+            <p className="text-xl font-semibold">Lat: {destination.coordinates.latitude}, Long: {destination.coordinates.longitude}</p>
+          </div>
+          </div>
+        </div>
+      )}
+    </div>
+  </>
+)}
+
 
         <div className="flex justify-center mt-6 items-center h-screen">
           <div
@@ -241,6 +316,7 @@ export default function Dashboard() {
     </div>
   );
 }
+
 
 
 

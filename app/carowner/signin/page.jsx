@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { auth } from '../../components/firebase';  // Adjust the import path according to your project structure
 import { FaEye, FaEyeSlash } from 'react-icons/fa';  // Import FontAwesome icons
@@ -19,7 +19,12 @@ export default function SignIn() {
     setLoading(true);
 
     try {
+      // Set persistence to local
+      await setPersistence(auth, browserLocalPersistence);
+
+      // Sign in the user
       await signInWithEmailAndPassword(auth, email, password);
+      
       setLoading(false);
       router.push('/carowner/dashboard'); // Redirect to dashboard after successful login
     } catch (error) {
@@ -80,5 +85,4 @@ export default function SignIn() {
     </div>
   );
 }
-
 

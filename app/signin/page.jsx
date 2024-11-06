@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { auth } from '../components/firebase';  // Adjust the import path according to your project structure
@@ -11,6 +11,19 @@ export default function SignIn() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    // Check if the user is already authenticated when the component mounts
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (user) {
+        // Redirect to the dashboard if the user is already signed in
+        router.push('/nonCarOwner/dashboard');
+      }
+    });
+
+    // Cleanup the listener on unmount
+    return () => unsubscribe();
+  }, [router]);
 
   const handleSignIn = async (e) => {
     e.preventDefault();

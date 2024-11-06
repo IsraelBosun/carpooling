@@ -300,9 +300,6 @@
 
 
 
-
-
-
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -322,32 +319,10 @@ export default function Dashboard() {
   const markerRef = useRef(null);
 
   useEffect(() => {
-    const fetchData = async (userId) => {
-      const docRef = doc(db, 'nonCarOwners', userId);
-      const docSnap = await getDoc(docRef);
+    const userFromStorage = localStorage.getItem('user'); // Retrieve user data from localStorage
 
-      if (docSnap.exists()) {
-        setCarOwnerData(docSnap.data());
-      } else {
-        console.error("No such document!");
-      }
-    };
-
-    const fetchOtherCarOwners = async () => {
-      const carOwnersRef = collection(db, 'carOwners'); // Adjust the collection name if different
-      const querySnapshot = await getDocs(carOwnersRef);
-      const ownersData = [];
-      querySnapshot.forEach((doc) => {
-        if (doc.data().location) {
-          ownersData.push(doc.data().location);
-        }
-      });
-      setOtherCarOwners(ownersData); // Set the other car owners' locations
-    };
-
-    // Check if the user is authenticated
-    const user = auth.currentUser;
-    if (user) {
+    if (userFromStorage) {
+      const user = JSON.parse(userFromStorage);
       fetchData(user.uid); // Pass user ID to fetchData
       fetchOtherCarOwners(); // Fetch other car owners' data
     } else {
@@ -355,41 +330,87 @@ export default function Dashboard() {
     }
   }, []); // Only run on mount
 
-  // Function to update location in Firestore
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (user) {
+        console.log('User is logged in:', user);  
+      } else {
+        console.log('No user is logged in');
+      }
+    });
+  
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (user) {
+        localStorage.setItem('user', JSON.stringify(user));
+        fetchData(user.uid);
+        fetchOtherCarOwners();
+      } else {
+        localStorage.removeItem('user');
+        console.error("User not authenticated");
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const fetchData = async (userId) => {
+    const docRef = doc(db, 'nonCarOwners', userId);
+    const docSnap = await getDoc(docRef);
+
+    if (docSnap.exists()) {
+      setCarOwnerData(docSnap.data());
+    } else {
+      console.error("No such document!");
+    }
+  };
+
+  const fetchOtherCarOwners = async () => {
+    const carOwnersRef = collection(db, 'carOwners'); // Adjust the collection name if different
+    const querySnapshot = await getDocs(carOwnersRef);
+    const ownersData = [];
+    querySnapshot.forEach((doc) => {
+      if (doc.data().location && doc.data().destination) {
+        ownersData.push({
+          location: doc.data().location,
+          email: doc.data().email,
+          destination: doc.data().destination // Get destination object
+        });
+      }
+    });
+    setOtherCarOwners(ownersData); // Set other car owners' data
+  };
+
   const updateLocationInFirestore = async (userId, location) => {
     try {
       const docRef = doc(db, 'nonCarOwners', userId);
-      await updateDoc(docRef, { location }); // Update the location field in Firestore
+      await updateDoc(docRef, { location });
     } catch (error) {
       console.error("Error updating location in Firestore: ", error);
     }
   };
 
   useEffect(() => {
-    // Get the user's location initially
     const initializeLocation = () => {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           (position) => {
             const { latitude, longitude } = position.coords;
             const initialLocation = [longitude, latitude];
+            setCurrentLocation(initialLocation);
 
-            setCurrentLocation(initialLocation); // Set the initial location
-
-            const user = auth.currentUser; // Get the current authenticated user
+            const user = auth.currentUser;
             if (user) {
-              // Update Firestore with the initial location
               updateLocationInFirestore(user.uid, { latitude, longitude });
             }
           },
           (error) => {
             console.error("Error getting initial location: ", error);
           },
-          {
-            enableHighAccuracy: true,
-            timeout: 5000,
-            maximumAge: 0,
-          }
+          { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
         );
       } else {
         console.error("Geolocation is not supported by this browser.");
@@ -398,42 +419,31 @@ export default function Dashboard() {
 
     const watchLocation = () => {
       if (navigator.geolocation) {
-        const user = auth.currentUser; // Get the current authenticated user
+        const user = auth.currentUser;
         if (!user) {
           console.error("User not authenticated");
           return;
         }
 
-        // Track the location and update Firestore in real-time
         navigator.geolocation.watchPosition(
           (position) => {
             const { latitude, longitude } = position.coords;
-            const location = { latitude, longitude };
-
-            setCurrentLocation([longitude, latitude]); // Update state with coordinates
-
-            // Update the location in Firestore for the authenticated user
-            updateLocationInFirestore(user.uid, location);
+            setCurrentLocation([longitude, latitude]);
+            updateLocationInFirestore(user.uid, { latitude, longitude });
           },
           (error) => {
             console.error("Error getting location: ", error);
           },
-          {
-            enableHighAccuracy: true,
-            timeout: 5000,
-            maximumAge: 0,
-          }
+          { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
         );
       } else {
         console.error("Geolocation is not supported by this browser.");
       }
     };
 
-    // Initialize the user's location first
     initializeLocation();
-    // After initializing, start watching for updates
     watchLocation();
-  }, []); // Only run on mount
+  }, []);
 
   useEffect(() => {
     if (mapContainerRef.current && currentLocation) {
@@ -448,34 +458,40 @@ export default function Dashboard() {
         mapRef.current.setCenter(currentLocation);
       }
 
-      // Remove existing marker if any
       if (markerRef.current) {
         markerRef.current.remove();
       }
 
-      // Create a new marker for the current user
-      markerRef.current = new mapboxgl.Marker({ color: 'blue' }) // Set color for current user
+      markerRef.current = new mapboxgl.Marker({ color: 'blue' })
         .setLngLat(currentLocation)
         .addTo(mapRef.current);
 
-      // Add a popup for the marker
       const popup = new mapboxgl.Popup({ offset: 25 })
         .setText('You are here!')
         .setLngLat(currentLocation);
 
       markerRef.current.setPopup(popup);
 
-      // Create markers for other car owners
-      otherCarOwners.forEach(ownerLocation => {
-        const ownerMarker = new mapboxgl.Marker({ color: 'red' }) // Set a different color for other car owners
-          .setLngLat([ownerLocation.longitude, ownerLocation.latitude])
+      otherCarOwners.forEach(owner => {
+        const { location, email, destination } = owner;
+
+        const ownerMarker = new mapboxgl.Marker({ color: 'red' })
+          .setLngLat([location.longitude, location.latitude])
           .addTo(mapRef.current);
+
+        const ownerPopup = new mapboxgl.Popup({ offset: 25 })
+          .setHTML(`
+            <strong>Email:</strong> ${email}<br />
+            <strong>Destination:</strong> ${destination.name}<br />
+            <strong>Coordinates:</strong> (${destination.coordinates.latitude}, ${destination.coordinates.longitude})
+          `);
+
+        ownerMarker.setPopup(ownerPopup);
       });
 
-      // Ensure the map resizes properly with container
       mapRef.current.resize();
     }
-  }, [currentLocation, otherCarOwners]); // Trigger when these change
+  }, [currentLocation, otherCarOwners]);
 
   return (
     <div className="w-full h-screen">
@@ -492,21 +508,14 @@ export default function Dashboard() {
         </div>
 
         {carOwnerData && (
-          <>
-            <div className="bg-blue-600 z-10 text-white p-4 flex justify-between items-center">
-              <h2 className="text-xl text-black">{carOwnerData.email}</h2>
-              <p className='text-black'>Seats Available: X</p> {/* Dynamically fetch */}
-            </div>
-            <div className="w-full p-4 bg-white space-y-4">
-              {/* Dynamically render passengers here */}
-              <p>Passenger Info 1: Floor, Unit, Dropoff</p>
-              <p>Passenger Info 2: Floor, Unit, Dropoff</p>
-            </div>
-          </>
+          <div className="z-10 text-white p-4 flex justify-between items-center">
+            <h2 className="text-xl text-black">{carOwnerData.email}</h2>
+            <h2 className="text-xl text-black">{carOwnerData.yearsUsed}</h2>
+            <p className='text-black'>{carOwnerData.department}</p>
+          </div>
         )}
 
         <div className="flex justify-center mt-6 items-center h-screen">
-          {/* Mapbox map container */}
           <div
             ref={mapContainerRef}
             className="w-[95%] items-center h-[80%] rounded-2xl shadow-md"
