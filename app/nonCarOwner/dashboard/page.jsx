@@ -454,8 +454,8 @@ export default function Dashboard() {
           center: currentLocation,
           zoom: 14,
         });
-      } else {
-        mapRef.current.setCenter(currentLocation);
+      // } else {
+      //   mapRef.current.setCenter(currentLocation);
       }
 
       if (markerRef.current) {

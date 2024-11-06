@@ -154,8 +154,8 @@ export default function Dashboard() {
           fetchRoute(currentLocation, newDestinationCoordinates);
         });
 
-      } else {
-        mapRef.current.setCenter(currentLocation);
+      // } else {
+      //   mapRef.current.setCenter(currentLocation);
       }
 
       if (markerRef.current) {
